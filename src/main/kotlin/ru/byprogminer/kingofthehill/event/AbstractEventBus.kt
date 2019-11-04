@@ -25,7 +25,7 @@ abstract class AbstractEventBus(
                 var eventType: Class<*>? = null
                 val parameters = mutableListOf<(Any, Any) -> Any?>()
                 for (parameter in method.parameters) {
-                    if (parameter.isAnnotationPresent(Event::class.java)) {
+                    if (parameter.isAnnotationPresent(EventParameter::class.java)) {
                         if (eventType == null) {
                             eventType = parameter.type
                         } else {

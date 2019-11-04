@@ -1,5 +1,6 @@
 package ru.byprogminer.kingofthehill
 
+import ru.byprogminer.kingofthehill.event.EventBus
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -9,7 +10,7 @@ abstract class AbstractGame {
     private var currentState: State = State.Waiting()
     private val stateLock = ReentrantReadWriteLock()
 
-    protected open fun nextState() {
+    protected open fun nextState() { // TODO
         stateLock.write {
             afterState(currentState)
 
@@ -45,83 +46,88 @@ abstract class AbstractGame {
         }
     }
 
-    open fun joinPlayer(player: User): Boolean {
-        when (val currentState = stateLock.read { currentState }) {
-            is State.Waiting -> return currentState.players.add(player)
-            else -> throw IllegalStateException()
-        }
-    }
+    protected fun onPlayer(event: Event.Player, eventBus: EventBus) {
+        val currentState = stateLock.read { currentState }
 
-    open fun leavePlayer(player: User): Boolean {
-        when (val currentState = stateLock.read { currentState }) {
-            is State.Waiting -> return currentState.players.remove(player)
-            else -> throw IllegalStateException()
-        }
-    }
-
-    fun endWaiting() {
-        when (stateLock.read { currentState }) {
-            is State.Waiting -> nextState()
-
-            else -> throw IllegalStateException()
-        }
-    }
-
-    fun selectStartingField(player: User, field: Field): Boolean {
-        when (val currentState = stateLock.read { currentState }) {
-            is State.Selecting ->
-                return if (!currentState.players.containsValue(field)) {
-                    currentState.players[player] = field
-
-                    true
+        when (event) {
+            is Event.Player.Join -> {
+                if (currentState is State.Waiting) {
+                    eventBus.fireEvent(joinPlayer(currentState, event.player))
                 } else {
-                    false
+                    throw IllegalStateException()
                 }
+            }
 
-            else -> throw IllegalStateException()
-        }
-    }
-
-    fun endSelecting() {
-        when (stateLock.read { currentState }) {
-            is State.Selecting -> nextState()
-
-            else -> throw IllegalStateException()
-        }
-    }
-
-    open fun step(player: User, direction: Direction): Boolean {
-        return when (val currentState = stateLock.read { currentState }) {
-            is State.Stage.First -> currentState.players[player]?.let { pl ->
-                @Suppress("NON_EXHAUSTIVE_WHEN") when (direction) {
-                    Direction.PEAK -> if (pl.field.nearThePeak == null) return@let false
-                    Direction.STAND -> if (!pl.field.peak) return@let false
+            is Event.Player.Leave -> {
+                if (currentState is State.Waiting) {
+                    eventBus.fireEvent(leavePlayer(currentState, event.player))
+                } else {
+                    throw IllegalStateException()
                 }
+            }
 
-                currentState.players[player] = pl.copy(field = getFieldByDirection(pl.field, direction))
-                return@let true
-            } ?: false
+            is Event.Player.SelectField -> {
+                if (currentState is State.Selecting) {
+                    eventBus.fireEvent(selectStartingField(currentState, event.player, currentState.fields[event.fieldId]))
+                } else {
+                    throw IllegalStateException()
+                }
+            }
 
-            else -> throw IllegalStateException()
+            is Event.Player.Step -> {
+                // TODO
+            }
+
+            is Event.Player.GetItemList -> {
+                if (currentState is State.Stage) {
+                    eventBus.fireEvent(getItemList(currentState, event.player))
+                } else {
+                    throw IllegalStateException()
+                }
+            }
+
+            is Event.Player.UseItem -> {
+                if (currentState is State.Stage) {
+                    eventBus.fireEvent(useItem(currentState, event.player,
+                        currentState.players[event.player]!!.items[event.slot], eventBus))
+                } else {
+                    throw IllegalStateException()
+                }
+            }
         }
     }
 
-    open fun useItem(player: User, item: Item) {
-        when (val currentState = stateLock.read { currentState }) {
-            is State.Stage -> stateLock.write { this.currentState = item.use(player, currentState) }
-            else -> throw IllegalStateException()
+    protected open fun joinPlayer(currentState: State.Waiting, player: User): Event.Game =
+        if (currentState.players.add(player)) {
+            Event.Game.PlayerJoined(this, player)
+        } else {
+            Event.Game.PlayerJoinedAlready(this, player)
         }
-    }
 
-    fun endFirstStage() {
-        when (stateLock.read { currentState }) {
-            is State.Stage.First -> nextState()
-
-            else -> throw IllegalStateException()
+    protected open fun leavePlayer(currentState: State.Waiting, player: User): Event.Game =
+        if (currentState.players.remove(player)) {
+            Event.Game.PlayerLeft(this, player)
+        } else {
+            Event.Game.PlayerLeftAlready(this, player)
         }
-    }
 
-    fun getCurrentState() = stateLock.read { currentState.state }
+    protected open fun selectStartingField(currentState: State.Selecting, player: User, field: Field): Event.Game =
+        if (!currentState.players.containsValue(field)) {
+            currentState.players[player] = field
+
+            Event.Game.PlayerSelectedField(this, player, field)
+        } else {
+            Event.Game.PlayerSelectedBusyField(this, player, field)
+        }
+
+    protected open fun getItemList(currentState: State.Stage, player: User): Event.Game =
+        Event.Game.PlayerGotItemList(this, player, currentState.players[player]!!.items)
+
+    protected open fun useItem(currentState: State.Stage, player: User, item: Item, eventBus: EventBus): Event.Game {
+        this.stateLock.write { this.currentState = item.use(player, currentState, eventBus) }
+
+        return Event.Game.PlayerUsedItem(this, player, item)
+    }
 
     protected abstract fun generateFields(): List<Field>
     protected abstract fun placeThings(busiedFields: Set<Field>, fields: List<Field>)
