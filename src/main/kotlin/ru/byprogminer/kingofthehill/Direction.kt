@@ -2,5 +2,5 @@ package ru.byprogminer.kingofthehill
 
 enum class Direction {
 
-    NORTH, EAST, SOUTH, WEST, PEAK
+    NORTH, EAST, SOUTH, WEST, PEAK, STAND
 }

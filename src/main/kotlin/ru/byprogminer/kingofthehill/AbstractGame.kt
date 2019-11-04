@@ -90,11 +90,17 @@ abstract class AbstractGame {
         }
     }
 
-    open fun step(player: User, direction: Direction) {
-        when (val currentState = stateLock.read { currentState }) {
+    open fun step(player: User, direction: Direction): Boolean {
+        return when (val currentState = stateLock.read { currentState }) {
             is State.Stage.First -> currentState.players[player]?.let { pl ->
+                @Suppress("NON_EXHAUSTIVE_WHEN") when (direction) {
+                    Direction.PEAK -> if (pl.field.nearThePeak == null) return@let false
+                    Direction.STAND -> if (!pl.field.peak) return@let false
+                }
+
                 currentState.players[player] = pl.copy(field = getFieldByDirection(pl.field, direction))
-            }
+                return@let true
+            } ?: false
 
             else -> throw IllegalStateException()
         }
