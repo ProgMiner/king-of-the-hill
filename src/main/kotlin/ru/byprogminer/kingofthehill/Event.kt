@@ -48,10 +48,14 @@ sealed class Event {
 
         data class SelectingState(override val game: AbstractGame, val fields: List<Field>): Game()
 
-        data class PlayerSelectedField(override val game: AbstractGame, val player: User, val field: Field): Game()
-        data class PlayerSelectedBusyField(override val game: AbstractGame, val player: User, val field: Field): Game()
+        data class PlayerSelectedField(override val game: AbstractGame, val player: User, val fieldId: Int): Game()
+        data class PlayerSelectedBusyField(override val game: AbstractGame, val player: User, val fieldId: Int): Game()
+        data class AnotherPlayerSelectedField(override val game: AbstractGame, val player: User): Game()
 
         // TODO data class FirstStageState(override val game: AbstractGame): Game()
+
+        data class PlayerStepped(override val game: AbstractGame, val player: User, val fieldId: Int): Game()
+        data class PlayerStayedStand(override val game: AbstractGame, val player: User): Game()
 
         data class PlayerGotItemList(override val game: AbstractGame, val player: User, val items: List<Item>): Game()
         data class PlayerUsedItem(override val game: AbstractGame, val player: User, val item: Item): Game()

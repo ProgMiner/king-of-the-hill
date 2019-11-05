@@ -9,7 +9,7 @@ sealed class State(val state: Enum) {
 
     data class Waiting(val players: MutableSet<User> = mutableSetOf()): State(Enum.WAITING)
 
-    data class Selecting(val players: MutableMap<User, Field?>, val fields: List<Field>): State(Enum.SELECTING)
+    data class Selecting(val players: MutableMap<User, Int?>, val fields: List<Field>): State(Enum.SELECTING)
 
     sealed class Stage(state: Enum): State(state) {
 

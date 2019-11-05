@@ -52,7 +52,7 @@ abstract class AbstractGame {
         when (event) {
             is Event.Player.Join -> {
                 if (currentState is State.Waiting) {
-                    eventBus.fireEvent(joinPlayer(currentState, event.player))
+                    joinPlayer(currentState, event.player, eventBus)
                 } else {
                     throw IllegalStateException()
                 }
@@ -60,7 +60,7 @@ abstract class AbstractGame {
 
             is Event.Player.Leave -> {
                 if (currentState is State.Waiting) {
-                    eventBus.fireEvent(leavePlayer(currentState, event.player))
+                    leavePlayer(currentState, event.player, eventBus)
                 } else {
                     throw IllegalStateException()
                 }
@@ -68,19 +68,23 @@ abstract class AbstractGame {
 
             is Event.Player.SelectField -> {
                 if (currentState is State.Selecting) {
-                    eventBus.fireEvent(selectStartingField(currentState, event.player, currentState.fields[event.fieldId]))
+                    selectStartingField(currentState, event.player, event.fieldId, eventBus)
                 } else {
                     throw IllegalStateException()
                 }
             }
 
             is Event.Player.Step -> {
-                // TODO
+                if (currentState is State.Stage) {
+                    step(currentState, event.player, event.direction, eventBus)
+                } else {
+                    throw IllegalStateException()
+                }
             }
 
             is Event.Player.GetItemList -> {
                 if (currentState is State.Stage) {
-                    eventBus.fireEvent(getItemList(currentState, event.player))
+                    getItemList(currentState, event.player, eventBus)
                 } else {
                     throw IllegalStateException()
                 }
@@ -88,8 +92,7 @@ abstract class AbstractGame {
 
             is Event.Player.UseItem -> {
                 if (currentState is State.Stage) {
-                    eventBus.fireEvent(useItem(currentState, event.player,
-                        currentState.players[event.player]!!.items[event.slot], eventBus))
+                    useItem(currentState, event.player, currentState.players[event.player]!!.items[event.slot], eventBus)
                 } else {
                     throw IllegalStateException()
                 }
@@ -97,42 +100,63 @@ abstract class AbstractGame {
         }
     }
 
-    protected open fun joinPlayer(currentState: State.Waiting, player: User): Event.Game =
+    protected open fun joinPlayer(currentState: State.Waiting, player: User, eventBus: EventBus) {
         if (currentState.players.add(player)) {
-            Event.Game.PlayerJoined(this, player)
+            eventBus.fireEvent(Event.Game.PlayerJoined(this, player))
         } else {
-            Event.Game.PlayerJoinedAlready(this, player)
+            eventBus.fireEvent(Event.Game.PlayerJoinedAlready(this, player))
         }
+    }
 
-    protected open fun leavePlayer(currentState: State.Waiting, player: User): Event.Game =
+    protected open fun leavePlayer(currentState: State.Waiting, player: User, eventBus: EventBus) {
         if (currentState.players.remove(player)) {
-            Event.Game.PlayerLeft(this, player)
+            eventBus.fireEvent(Event.Game.PlayerLeft(this, player))
         } else {
-            Event.Game.PlayerLeftAlready(this, player)
+            eventBus.fireEvent(Event.Game.PlayerLeftAlready(this, player))
         }
+    }
 
-    protected open fun selectStartingField(currentState: State.Selecting, player: User, field: Field): Event.Game =
-        if (!currentState.players.containsValue(field)) {
-            currentState.players[player] = field
+    protected open fun selectStartingField(currentState: State.Selecting, player: User, fieldId: Int, eventBus: EventBus) {
+        if (!currentState.players.containsValue(fieldId)) {
+            currentState.players[player] = fieldId
 
-            Event.Game.PlayerSelectedField(this, player, field)
+            eventBus.fireEvent(Event.Game.PlayerSelectedField(this, player, fieldId))
         } else {
-            Event.Game.PlayerSelectedBusyField(this, player, field)
+            for ((p, f) in currentState.players) {
+                if (f == fieldId) {
+                    currentState.players[p] = null
+
+                    eventBus.fireEvent(Event.Game.AnotherPlayerSelectedField(this, p))
+                    break
+                }
+            }
+
+            eventBus.fireEvent(Event.Game.PlayerSelectedBusyField(this, player, fieldId))
         }
+    }
 
-    protected open fun getItemList(currentState: State.Stage, player: User): Event.Game =
-        Event.Game.PlayerGotItemList(this, player, currentState.players[player]!!.items)
+    protected open fun step(currentState: State.Stage, player: User, direction: Direction, eventBus: EventBus) {
+        if (direction === Direction.STAND) {
+            when {
+                // TODO
+            }
+        }
+    }
 
-    protected open fun useItem(currentState: State.Stage, player: User, item: Item, eventBus: EventBus): Event.Game {
+    protected open fun getItemList(currentState: State.Stage, player: User, eventBus: EventBus) {
+        eventBus.fireEvent(Event.Game.PlayerGotItemList(this, player, currentState.players[player]!!.items))
+    }
+
+    protected open fun useItem(currentState: State.Stage, player: User, item: Item, eventBus: EventBus) {
         this.stateLock.write { this.currentState = item.use(player, currentState, eventBus) }
 
-        return Event.Game.PlayerUsedItem(this, player, item)
+        eventBus.fireEvent(Event.Game.PlayerUsedItem(this, player, item))
     }
 
     protected abstract fun generateFields(): List<Field>
-    protected abstract fun placeThings(busiedFields: Set<Field>, fields: List<Field>)
+    protected abstract fun placeThings(busiedFields: Set<Int>, fields: List<Field>)
     protected abstract fun checkEnd(currentState: State.Stage): Boolean
-    protected abstract fun getFieldByDirection(field: Field, direction: Direction): Field
+    protected abstract fun getFieldByDirection(fields: List<Field>, fieldId: Int, direction: Direction): Int
 
     protected open fun afterState(currentState: State) {}
     protected open fun beforeState(currentState: State) {}
